@@ -1,0 +1,81 @@
+# Local demo stack: web + queue worker + scheduler + PostgreSQL + Redis.
+# The passwords below are for this throwaway local stack only.
+name: payment-webhooks
+
+x-app-env: &app-env
+  APP_ENV: local
+  APP_DEBUG: "false"
+  LOG_CHANNEL: stderr
+  DB_CONNECTION: pgsql
+  DB_HOST: postgres
+  DB_PORT: "5432"
+  DB_DATABASE: webhooks
+  DB_USERNAME: webhooks
+  DB_PASSWORD: webhooks
+  QUEUE_CONNECTION: redis
+  CACHE_STORE: redis
+  SESSION_DRIVER: array
+  REDIS_CLIENT: predis
+  REDIS_HOST: redis
+  WEBHOOK_DEMO_SECRETS: ${WEBHOOK_DEMO_SECRETS:-whsec_demo_local_only}
+
+services:
+  app:
+    build: .
+    image: payment-webhooks:local
+    environment:
+      <<: *app-env
+      RUN_MIGRATIONS: "true"
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "php", "-r", "exit(@file_get_contents('http://127.0.0.1:8000/up') === false ? 1 : 0);"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  worker:
+    image: payment-webhooks:local
+    command: ["php", "artisan", "queue:work", "--sleep=1", "--max-time=3600"]
+    environment: *app-env
+    depends_on:
+      app:
+        condition: service_healthy
+
+  scheduler:
+    image: payment-webhooks:local
+    command: ["php", "artisan", "schedule:work"]
+    environment: *app-env
+    depends_on:
+      app:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: webhooks
+      POSTGRES_USER: webhooks
+      POSTGRES_PASSWORD: webhooks
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U webhooks -d webhooks"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata:
