@@ -72,6 +72,13 @@ scripts/send-webhook.sh payment.refunded  pay_1 500
 
 The stack contains the web app, a queue worker, the scheduler, PostgreSQL and Redis.
 
+If port 8000 is already taken on your machine, pick another one:
+
+```bash
+APP_PORT=8080 docker compose up --build
+export WEBHOOK_URL=http://localhost:8080/api/webhooks/demo
+```
+
 ### Without Docker (PHP 8.3+, SQLite)
 
 ```bash
